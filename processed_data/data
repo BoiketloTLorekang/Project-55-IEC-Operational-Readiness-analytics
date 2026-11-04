@@ -1,0 +1,215 @@
+import sqlite3
+import numpy as np
+import pandas as pd
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+print("=== STEP 1: Generating Hybrid IEC Dataset (Simulating National Scale) ===")
+
+# Expanded base infrastructure list representing major South African municipalities
+provinces = [
+    "Gauteng",
+    "Gauteng",
+    "Gauteng",
+    "KwaZulu-Natal",
+    "KwaZulu-Natal",
+    "Western Cape",
+    "Western Cape",
+    "Eastern Cape",
+    "Free State",
+    "Limpopo",
+    "Mpumalanga",
+    "North West",
+]
+municipalities = [
+    "JHB - City of Johannesburg",
+    "TSH - City of Tshwane",
+    "EKU - Ekurhuleni",
+    "ETH - eThekhwini",
+    "KZN225 - Msunduzi",
+    "CPT - City of Cape Town",
+    "WC024 - Stellenbosch",
+    "BUF - Buffalo City",
+    "MAN - Mangaung",
+    "LIM354 - Polokwane",
+    "MP311 - Mbombela",
+    "NW372 - Rustenburg",
+]
+stations = [
+    "Community Hall",
+    "Primary School",
+    "Secondary High",
+    "Civic Centre",
+    "Sports Complex",
+    "Multi-Purpose Centre",
+    "Library Hall",
+    "Technical College",
+]
+
+# Generate 50 realistic voting stations across these regions
+n_stations = 50
+station_data = {
+    "Station_ID": [f"VD_{10000000 + i}" for i in range(n_stations)],
+    "Province": np.random.choice(provinces, n_stations),
+    "Municipality": np.random.choice(municipalities, n_stations),
+    "RegisteredVoters": np.random.randint(
+        800, 4800, n_stations
+    ),  # Typical voting district size
+    "Network_Coverage": np.random.choice(
+        ["High", "Medium", "Low"], n_stations, p=[0.6, 0.3, 0.1]
+    ),
+}
+
+df_base = pd.DataFrame(station_data)
+df_base["Station_Name"] = (
+    df_base["Municipality"].apply(lambda x: x.split(" - ")[-1])
+    + " "
+    + np.random.choice(stations, n_stations)
+)
+
+
+# ---------------------------------------------------------------------------
+# STEP 2: Advanced Pandas Operational Resource Allocation Logic
+# ---------------------------------------------------------------------------
+def apply_iec_operational_rules(df):
+  df_ops = df.copy()
+
+  # 1. Infrastructure Type: Smaller stations or remote areas more likely to use temporary structures
+  df_ops["Is_Temporary_Structure"] = np.where(
+      (df_ops["RegisteredVoters"] < 1500)
+      & (df_ops["Network_Coverage"] == "Low"),
+      "Yes (Tent/Mobile)",
+      "No (Permanent Building)",
+  )
+
+  # 2. Technology & Hardware Allocation (VMDs: Voter Management Devices)
+  # Standard formula: 1 base device + 1 per 1,200 voters
+  df_ops["VMDs_Allocated"] = 1 + (df_ops["RegisteredVoters"] // 1200)
+
+  # 3. Staffing Requirements (1 Presiding Officer, 1 Deputy, + 1 Electoral Officer per 500 voters)
+  df_ops["Presiding_Officers"] = 1
+  df_ops["Deputy_Presiding_Officers"] = 1
+  df_ops["Electoral_Officers"] = np.maximum(
+      3, df_ops["RegisteredVoters"] // 500
+  )
+  df_ops["Total_Staff_Allocated"] = (
+      df_ops["Presiding_Officers"]
+      + df_ops["Deputy_Presiding_Officers"]
+      + df_ops["Electoral_Officers"]
+  )
+
+  # 4. Ballot Paper Printing (Ward + PR with standard 5% buffer)
+  BUFFER = 1.05
+  df_ops["Ward_Ballots"] = np.ceil(
+      df_ops["RegisteredVoters"] * BUFFER
+  ).astype(int)
+  df_ops["PR_Ballots"] = np.ceil(df_ops["RegisteredVoters"] * BUFFER).astype(int)
+  df_ops["Total_Ballots_Printed"] = (
+      df_ops["Ward_Ballots"] + df_ops["PR_Ballots"]
+  )
+
+  # 5. Core Operational Ratios (KPIs)
+  df_ops["Voter_To_Staff_Ratio"] = (
+      df_ops["RegisteredVoters"] / df_ops["Total_Staff_Allocated"]
+  ).round(1)
+
+  # 6. Risk Scoring (Categorize operational bottleneck risk)
+  conditions = [
+      (df_ops["Voter_To_Staff_Ratio"] > 420)
+      | (df_ops["Network_Coverage"] == "Low"),
+      (df_ops["Voter_To_Staff_Ratio"] > 350),
+  ]
+  choices = ["High Risk", "Medium Risk"]
+  df_ops["Operational_Risk_Tier"] = np.select(
+      conditions, choices, default="Optimal"
+  )
+
+  return df_ops
+
+
+df_iec_operational = apply_iec_operational_rules(df_base)
+
+print(
+    f"Successfully synthesized operational allocations for"
+    f" {len(df_iec_operational)} voting stations.\n"
+)
+
+
+# ---------------------------------------------------------------------------
+# STEP 3: Advanced Pandas Analytics & Groupbys
+# ---------------------------------------------------------------------------
+print("=== STEP 4: Advanced Pandas Provincial Aggregations ===")
+provincial_summary = (
+    df_iec_operational.groupby("Province")
+    .agg(
+        Total_Stations=("Station_ID", "count"),
+        Total_Registered_Voters=("RegisteredVoters", "sum"),
+        Total_Staff_Required=("Total_Staff_Allocated", "sum"),
+        Total_VMDs=("VMDs_Allocated", "sum"),
+        Total_Ballots=("Total_Ballots_Printed", "sum"),
+        Avg_Staff_Ratio=("Voter_To_Staff_Ratio", "mean"),
+    )
+    .reset_index()
+)
+provincial_summary["Avg_Staff_Ratio"] = provincial_summary[
+    "Avg_Staff_Ratio"
+].round(1)
+print(provincial_summary.to_string(index=False))
+print("\n" + "=" * 60 + "\n")
+
+
+# ---------------------------------------------------------------------------
+# STEP 4: SQLite Database Bridge & SQL Analytics Queries
+# ---------------------------------------------------------------------------
+print("=== STEP 5: Loading into SQLite & Executing SQL Queries ===")
+
+# Connect to a local SQLite in-memory database (or file 'iec_project.db')
+conn = sqlite3.connect("iec_project.db")
+
+# Write the Pandas DataFrame into a SQL table
+df_iec_operational.to_sql(
+    "voting_stations_master", conn, if_exists="replace", index=False
+)
+
+# SQL Query 1: Find Municipalities with Highest Total Voter Load & Risk Breakdown
+print("\n[SQL Query 1] Municipal Operational Load & High-Risk Station Count:")
+query_municipal_risk = """
+    SELECT 
+        Municipality,
+        COUNT(Station_ID) AS Station_Count,
+        SUM(RegisteredVoters) AS Total_Voters,
+        SUM(Total_Staff_Allocated) AS Total_Staff,
+        SUM(CASE WHEN Operational_Risk_Tier = 'High Risk' THEN 1 ELSE 0 END) AS High_Risk_Stations
+    FROM voting_stations_master
+    GROUP BY Municipality
+    ORDER BY Total_Voters DESC
+    LIMIT 5;
+"""
+df_sql_1 = pd.read_sql(query_municipal_risk, conn)
+print(df_sql_1.to_string(index=False))
+
+# SQL Query 2: Logistical Supply Requirements for High-Priority / Low Network Areas
+print(
+    "\n[SQL Query 2] Resource Totals for Stations Operating in Low Network"
+    " Coverage:"
+)
+query_low_network = """
+    SELECT 
+        Province,
+        COUNT(Station_ID) AS Vulnerable_Stations,
+        SUM(RegisteredVoters) AS Affected_Voters,
+        SUM(VMDs_Allocated) AS VMDs_Required,
+        SUM(Total_Ballots_Printed) AS Ballots_Required
+    FROM voting_stations_master
+    WHERE Network_Coverage = 'Low'
+    GROUP BY Province;
+"""
+df_sql_2 = pd.read_sql(query_low_network, conn)
+print(df_sql_2.to_string(index=False))
+
+# Close connection
+conn.close()
+print(
+    "\n=== Project 1 Pipeline Complete! Database saved as 'iec_project.db' ==="
+)
